@@ -1,0 +1,15 @@
+{
+  "name": "할 일",
+  "short_name": "할 일",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f7fb",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAP0lEQVR42u3PAQ0AAAwCoNm/9Fh4oQYl0gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPgN3gABZ1cQwQAAAABJRU5ErkJggg==",
+      "sizes": "64x64",
+      "type": "image/png"
+    }
+  ]
+}
