@@ -7,7 +7,7 @@
   <style>
     :root { font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
     body { margin: 0; background: #f6f7fb; }
-    .wrap { max-width: 560px; margin: 0 auto; padding: 16px; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 16px; } /* ✅ 폭 더 크게 */
 
     /* Top */
     .topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
@@ -24,27 +24,27 @@
     .card { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 8px 20px rgba(0,0,0,.06); }
 
     /* Calendar */
-    .dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin: 8px 0; }
-    .dow div { text-align: center; font-size: 12px; color: #6b7280; }
+    .dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; margin: 8px 0; } /* ✅ 간격 0 */
+    .dow div { text-align: center; font-size: 12px; color: #6b7280; padding: 6px 0; }
     .dow .sunHead { color: #ef4444; font-weight: 800; }
     .dow .satHead { color: #2563eb; font-weight: 800; }
 
-    .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; } /* ✅ 간격 0 */
     .cell {
       background: #fff;
       border: 1px solid #eef0f4;
-      border-radius: 0;           /* ✅ 날짜칸 사각 */
-      padding: 10px 8px;
-      min-height: 68px;
+      border-radius: 0;                 /* ✅ 사각 */
+      padding: 12px 10px;
+      min-height: 82px;                 /* ✅ 조금 더 크게 */
       display: flex;
       flex-direction: column;
       gap: 6px;
       cursor: pointer;
-      box-shadow: 0 1px 8px rgba(0,0,0,.04);
+      box-shadow: none;                 /* ✅ 붙어보이게 */
       user-select: none;
     }
     .cell.muted { opacity: .45; }
-    .cell.selected { outline: 2px solid #111827; }
+    .cell.selected { outline: 2px solid #111827; outline-offset: -2px; }
 
     .daynum {
       font-size: 14px; font-weight: 800;
@@ -59,6 +59,14 @@
     /* ✅ 공휴일 스타일 */
     .holidayCell { background: #fff5f5; border-color: #ffd7d7; }
     .holidayNum { color: #ef4444; font-weight: 900; }
+
+    .holidayLine {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+      min-height: 14px;
+    }
     .holidayName {
       font-size: 11px;
       color: #ef4444;
@@ -66,7 +74,17 @@
       overflow: hidden;
       text-overflow: ellipsis;
       line-height: 1.1;
-      margin-top: 2px;
+      flex: 1;
+      min-width: 0;
+    }
+    .subTag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #ef4444;
+      color: #fff;
+      font-weight: 800;
+      white-space: nowrap;
     }
 
     .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #111827; color: #fff; }
@@ -141,9 +159,9 @@
     // { "YYYY-MM-DD": [ {id, text, done, createdAt} , ... ], ... }
     const TODO_KEY = "calendar_todo_v1";
 
-    // ===== Holiday Source =====
+    // ===== Holiday Source (KR) =====
     // GET https://date.nager.at/api/v3/PublicHolidays/{year}/KR
-    const HOLI_CACHE_KEY = "kr_holidays_cache_v1"; // { [year]: { [dateKey]: name } }
+    const HOLI_CACHE_KEY = "kr_holidays_cache_v1"; // { holidayByYear: { [year]: { [dateKey]: {name,isSub} } }, meta: { [year]: {fetchedAt} } }
     const HOLI_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30일
 
     const $monthTitle = document.getElementById("monthTitle");
@@ -164,7 +182,7 @@
     let todoData = {}; // dateKey -> todos[]
 
     // Holidays
-    let holidayByYear = {}; // year -> { dateKey -> name }
+    let holidayByYear = {}; // year -> { dateKey -> {name,isSub} }
     let holidayCacheMeta = {}; // year -> { fetchedAt }
 
     const today = new Date();
@@ -232,22 +250,34 @@
         meta: holidayCacheMeta
       }));
     }
-    function getHolidayName(dateKey){
+
+    function getHolidayObj(dateKey){
       const y = Number(dateKey.slice(0,4));
-      return (holidayByYear[y] && holidayByYear[y][dateKey]) ? holidayByYear[y][dateKey] : "";
+      return (holidayByYear[y] && holidayByYear[y][dateKey]) ? holidayByYear[y][dateKey] : null;
+    }
+    function getHolidayName(dateKey){
+      const o = getHolidayObj(dateKey);
+      return o ? o.name : "";
     }
     function isHoliday(dateKey){
       return !!getHolidayName(dateKey);
     }
+    function isSubHoliday(dateKey){
+      const o = getHolidayObj(dateKey);
+      return !!(o && o.isSub);
+    }
+
+    function detectSubstitute(name){
+      const n = (name || "").toLowerCase();
+      // ✅ "대체공휴일", "대체 휴일", "substitute" 등 감지
+      return (name.includes("대체") || n.includes("substitute"));
+    }
 
     async function ensureHolidaysForYear(year){
-      // 캐시가 있고 TTL 안이면 skip
       const meta = holidayCacheMeta[year];
       if(holidayByYear[year] && meta && (Date.now() - meta.fetchedAt) < HOLI_TTL_MS){
         return;
       }
-
-      // 네트워크 fetch 시도 (실패해도 앱은 계속 동작)
       try{
         const url = `https://date.nager.at/api/v3/PublicHolidays/${year}/KR`;
         const res = await fetch(url, { cache: "no-store" });
@@ -256,19 +286,17 @@
 
         const map = {};
         for(const h of arr){
-          // date: "YYYY-MM-DD"
-          const dateKey = h.date;
-          // name/localName: 언어가 섞일 수 있어 localName 우선
+          const dateKey = h.date; // "YYYY-MM-DD"
           const name = (h.localName || h.name || "").trim();
-          if(dateKey && name) map[dateKey] = name;
+          if(dateKey && name){
+            map[dateKey] = { name, isSub: detectSubstitute(name) };
+          }
         }
 
         holidayByYear[year] = map;
         holidayCacheMeta[year] = { fetchedAt: Date.now() };
         holidaySaveCache();
       } catch (e){
-        // 네트워크 실패 시: 기존 캐시가 있으면 그대로 사용
-        // 콘솔에만 남김
         console.log(e);
       }
     }
@@ -281,12 +309,12 @@
       renderMonthTitle();
       $calGrid.innerHTML = "";
 
-      // Calendar range (6 rows * 7 = 42 cells)
+      // ✅ 7*5 = 35칸 고정
       const first = new Date(viewYear, viewMonth, 1);
       const firstDow = first.getDay(); // 0 Sun
       const start = new Date(viewYear, viewMonth, 1 - firstDow);
 
-      for(let i=0;i<42;i++){
+      for(let i=0;i<35;i++){
         const d = new Date(start);
         d.setDate(start.getDate() + i);
         const inMonth = (d.getMonth() === viewMonth);
@@ -297,9 +325,8 @@
         if(!inMonth) cell.classList.add("muted");
         if(key === selectedDateKey) cell.classList.add("selected");
 
-        // ✅ 공휴일 자동 색상
-        const holiName = getHolidayName(key);
-        if(holiName) cell.classList.add("holidayCell");
+        const holiObj = getHolidayObj(key);
+        if(holiObj) cell.classList.add("holidayCell");
 
         const top = document.createElement("div");
         top.className = "daynum";
@@ -307,22 +334,19 @@
         const left = document.createElement("div");
         left.textContent = d.getDate();
 
-        // ✅ 공휴일 숫자는 빨강(우선)
-        if(holiName){
+        // 공휴일 우선 색상
+        if(holiObj){
           left.classList.add("holidayNum");
         } else {
-          // ✅ 요일별 숫자 색: 일(0)=빨강, 토(6)=파랑
           if (d.getDay() === 0) left.classList.add("sunNum");
           if (d.getDay() === 6) left.classList.add("satNum");
         }
 
-        // today marker
         if(isSameDay(d, today)){
           const dot = document.createElement("span");
           dot.className = "todayDot";
           left.appendChild(dot);
         }
-
         top.appendChild(left);
 
         const c = countTodos(key);
@@ -339,25 +363,36 @@
 
         cell.appendChild(top);
 
-        // ✅ 공휴일 이름(짧게)
-        if(holiName){
+        // 공휴일 이름 + 대체 표시
+        if(holiObj){
+          const line = document.createElement("div");
+          line.className = "holidayLine";
+
           const hn = document.createElement("div");
           hn.className = "holidayName";
-          hn.textContent = holiName;
-          cell.appendChild(hn);
+          hn.textContent = holiObj.name;
+
+          line.appendChild(hn);
+
+          if(holiObj.isSub){
+            const tag = document.createElement("span");
+            tag.className = "subTag";
+            tag.textContent = "대체";
+            line.appendChild(tag);
+          }
+
+          cell.appendChild(line);
         }
 
         cell.addEventListener("click", () => {
           selectedDateKey = key;
-          // 다른 달 날짜를 눌렀다면 뷰도 그 달로 이동
           if(d.getMonth() !== viewMonth || d.getFullYear() !== viewYear){
             viewYear = d.getFullYear();
             viewMonth = d.getMonth();
-            // 연도 바뀔 수 있으니 공휴일 로드 후 렌더
             renderAllAsync();
             return;
           }
-          renderAll(); // 같은 달이면 즉시
+          renderAll();
           $todoInput.focus();
         });
 
@@ -371,9 +406,13 @@
       const todos = getTodos(selectedDateKey);
       const doneCount = todos.filter(t => t.done).length;
 
-      const holiName = getHolidayName(selectedDateKey);
+      const holiObj = getHolidayObj(selectedDateKey);
+      const holiText = holiObj
+        ? ` · 공휴일: ${escapeHtml(holiObj.name)}${holiObj.isSub ? " (대체)" : ""}`
+        : "";
+
       $selectedMeta.innerHTML = `총 ${todos.length}개 · 완료 ${doneCount}개 (로컬 저장됨)` +
-        (holiName ? ` <span class="holidayTag">· 공휴일: ${escapeHtml(holiName)}</span>` : "");
+        (holiText ? ` <span class="holidayTag">${holiText}</span>` : "");
 
       $todoList.innerHTML = "";
       $todoEmpty.style.display = (todos.length === 0) ? "block" : "none";
@@ -409,7 +448,7 @@
           const next = todos.filter(x => x.id !== t.id);
           setTodos(selectedDateKey, next);
           renderTodos();
-          renderCalendar(); // 배지 갱신
+          renderCalendar();
         });
 
         li.appendChild(left);
@@ -433,7 +472,7 @@
       setTodos(selectedDateKey, todos);
       $todoInput.value = "";
       renderTodos();
-      renderCalendar(); // 배지 갱신
+      renderCalendar();
     }
 
     function clearDone(){
@@ -450,7 +489,6 @@
     }
 
     async function renderAllAsync(){
-      // 연도별 공휴일 확보 후 렌더
       const y1 = viewYear;
       const y2 = Number(selectedDateKey.slice(0,4));
       await ensureHolidaysForYear(y1);
@@ -501,7 +539,6 @@
     todoLoad();
     holidayLoadCache();
     (async () => {
-      // 현재 보이는 연도 공휴일 로드(캐시/네트워크)
       await ensureHolidaysForYear(viewYear);
       renderAll();
     })();
