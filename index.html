@@ -34,7 +34,7 @@
       border: 1px solid #eef0f4;
       border-radius: 0;                 /* ✅ 사각 */
       padding: 12px 10px;
-      min-height: 86px;                 /* ✅ 크게 */
+      min-height: 94px;                 /* ✅ 크게 */
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -59,31 +59,33 @@
     .holidayNum { color: #ef4444; font-weight: 900; }
 
     .holidayWrap { display: flex; flex-direction: column; gap: 3px; }
-    .holidayLine {
-      display: flex; align-items: center; gap: 6px;
-      min-height: 14px;
-    }
+    .holidayLine { display: flex; align-items: center; gap: 6px; min-height: 14px; }
     .holidayName {
-      font-size: 11px;
-      color: #ef4444;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      line-height: 1.1;
-      flex: 1;
-      min-width: 0;
+      font-size: 11px; color: #ef4444;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      line-height: 1.1; flex: 1; min-width: 0;
     }
     .subTag {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: #ef4444;
-      color: #fff;
-      font-weight: 800;
-      white-space: nowrap;
+      font-size: 10px; padding: 2px 6px; border-radius: 999px;
+      background: #ef4444; color: #fff; font-weight: 800; white-space: nowrap;
     }
 
+    /* Market schedule styles */
+    .mktWrap { display: flex; flex-direction: column; gap: 3px; }
+    .mktLine { display: flex; align-items: center; gap: 6px; min-height: 14px; }
+    .mktName {
+      font-size: 11px; color: #111827;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      line-height: 1.1; flex: 1; min-width: 0;
+    }
+    .mktMajorTag {
+      font-size: 10px; padding: 2px 6px; border-radius: 999px;
+      background: #111827; color: #fff; font-weight: 800; white-space: nowrap;
+    }
+    .mktCellHint { background: #fffdf2; border-color: #f3e8b8; } /* 아주 약한 하이라이트 */
+
     .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #111827; color: #fff; }
+    .mktBadge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f59e0b; color: #111827; font-weight: 900; }
     .todayDot { width: 8px; height: 8px; border-radius: 999px; background: #ef4444; display: inline-block; margin-left: 6px; }
 
     /* Todo panel */
@@ -113,6 +115,25 @@
     .empty { padding: 14px 2px; color: #9ca3af; font-size: 14px; }
 
     .tinyWarn { font-size: 11px; color: #9ca3af; margin-top: 6px; }
+
+    /* Market panel */
+    .mktPanel { margin-top: 12px; }
+    .mktPanel h3 { margin: 0 0 8px; font-size: 14px; font-weight: 900; }
+    .mktItem {
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 10px 12px; border: 1px solid #eef0f4; border-radius: 14px; background: #fff;
+    }
+    .mktItemTop { display: flex; gap: 8px; align-items: center; }
+    .mktItemTitle { font-size: 14px; font-weight: 900; color: #111827; }
+    .mktItemTime { font-size: 12px; color: #6b7280; }
+    .pillMajor {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      background: #111827; color: #fff; font-weight: 900;
+    }
+    .pillMinor {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      background: #e5e7eb; color: #111827; font-weight: 900;
+    }
   </style>
 </head>
 <body>
@@ -143,6 +164,11 @@
         <button class="secondary" id="clearDoneBtn">완료삭제</button>
       </div>
 
+      <div class="mktPanel" id="mktPanel" style="display:none;">
+        <h3>📈 증시 주요 일정</h3>
+        <div id="mktList" style="display:flex; flex-direction:column; gap:10px;"></div>
+      </div>
+
       <div class="row">
         <input id="todoInput" type="text" placeholder="선택한 날짜에 할 일을 추가" autocomplete="off" />
         <button class="add" id="addBtn">추가</button>
@@ -162,6 +188,76 @@
     const HOLIDAY_FILE = "./basic.json";
     const HOLIDAY_CACHE_KEY = "kr_holiday_file_cache_v1";
 
+    // ===== Market Schedule (from your xlsx, up to May) =====
+    // dateKey -> [{title,time,major}]
+    const MARKET_EVENTS = {
+      "2026-02-24": [{"title":"홈 디포 실적발표","time":"오후 10시 이후","major":true}],
+      "2026-02-25": [{"title":"CB 소비자신뢰지수 발표","time":"오전 12시 발표 예정","major":false}],
+      "2026-02-26": [
+        {"title":"엔비디아 실적발표","time":"오전 6시 이후","major":true},
+        {"title":"한국은행 금융통화위원회","time":"오전 10시 발표 예정","major":false},
+        {"title":"조비 에비에이션(JOBY) 실적발표","time":"오전 6시 이후","major":false},
+        {"title":"아이온큐(IonQ, NYSE: IONQ) 실적발표","time":"오전 6시 30분 발표 예정","major":false}
+      ],
+      "2026-02-27": [
+        {"title":"근원 생산자물가지수 발표(전년 대비)","time":"오후 10시 30분 발표 예정","major":false},
+        {"title":"근원 생산자물가지수 발표(전월 대비)","time":"오후 10시 30분 발표 예정","major":false},
+        {"title":"생산자물가지수(PPI) 발표(전년 대비)","time":"오후 10시 30분 발표 예정","major":false},
+        {"title":"생산자물가지수(PPI) 발표(전월 대비)","time":"오후 10시 30분 발표 예정","major":false}
+      ],
+      "2026-03-03": [{"title":"ISM 제조업 구매관리자지수 발표","time":"오전 12시 발표 예정","major":false}],
+      "2026-03-04": [{"title":"비농업부문 고용변화량(ADP) 발표","time":"오후 10시 15분 발표 예정","major":false}],
+      "2026-03-05": [
+        {"title":"ISM 서비스업 구매관리자지수 발표","time":"오전 12시 발표 예정","major":false},
+        {"title":"브로드컴 실적발표","time":"오전 6시 이후","major":true}
+      ],
+      "2026-03-06": [
+        {"title":"비농업부문 고용지수(NFP) 발표","time":"오후 10시 30분 발표 예정","major":false},
+        {"title":"실업률 발표","time":"오후 10시 30분 발표 예정","major":false},
+        {"title":"코스트코 실적발표","time":"오전 6시 이후","major":true}
+      ],
+      "2026-03-11": [
+        {"title":"소비자물가지수(CPI) 발표(전년 대비)","time":"오후 10시 30분 발표 예정","major":false},
+        {"title":"소비자물가지수(CPI) 발표(전월 대비)","time":"오후 10시 30분 발표 예정","major":false},
+        {"title":"근원 소비자물가지수(Core CPI) 발표(전년 대비)","time":"오후 10시 30분 발표 예정","major":false},
+        {"title":"근원 소비자물가지수(Core CPI) 발표(전월 대비)","time":"오후 10시 30분 발표 예정","major":false}
+      ],
+      "2026-03-12": [{"title":"생산자물가지수(PPI) 발표(전년 대비)","time":"오후 10시 30분 발표 예정","major":false}],
+      "2026-03-13": [{"title":"미시간대 소비자심리지수 발표","time":"오후 11시 발표 예정","major":false}],
+      "2026-03-18": [
+        {"title":"FOMC 금리결정","time":"오전 3시 발표 예정","major":true},
+        {"title":"파월 기자회견","time":"오전 3시 30분 예정","major":true}
+      ],
+      "2026-03-19": [{"title":"나이키 실적발표","time":"오전 6시 이후","major":false}],
+      "2026-03-27": [{"title":"근원 개인소비지출 물가지수(Core PCE) 발표","time":"오후 9시 30분 발표 예정","major":false}],
+      "2026-04-01": [{"title":"ISM 제조업 PMI 발표","time":"오전 12시 발표 예정","major":false}],
+      "2026-04-03": [
+        {"title":"비농업부문 고용지수(NFP) 발표","time":"오후 9시 30분 발표 예정","major":false},
+        {"title":"실업률 발표","time":"오후 9시 30분 발표 예정","major":false}
+      ],
+      "2026-04-09": [{"title":"소비자물가지수(CPI) 발표","time":"오후 9시 30분 발표 예정","major":false}],
+      "2026-04-10": [{"title":"생산자물가지수(PPI) 발표","time":"오후 9시 30분 발표 예정","major":false}],
+      "2026-04-15": [
+        {"title":"소매판매 발표","time":"오후 9시 30분 발표 예정","major":false},
+        {"title":"산업생산 발표","time":"오후 10시 15분 발표 예정","major":false}
+      ],
+      "2026-04-23": [{"title":"알파벳(구글) 실적발표","time":"오전 5시 이후","major":true}],
+      "2026-04-24": [{"title":"테슬라 실적발표","time":"오전 5시 이후","major":true}],
+      "2026-04-30": [
+        {"title":"셰브론 실적발표","time":"오후 9시 이후","major":true},
+        {"title":"아마존 실적발표","time":"오전 5시 이후","major":true},
+        {"title":"애플 실적발표","time":"오전 5시 이후","major":true}
+      ],
+      "2026-05-01": [
+        {"title":"셰브론 실적발표","time":"오후 9시 이후","major":true},
+        {"title":"아마존 실적발표","time":"오전 5시 이후","major":true},
+        {"title":"애플 실적발표","time":"오전 5시 이후","major":true}
+      ],
+      "2026-05-06": [{"title":"AMD 실적발표","time":"오전 5시 이후","major":true}],
+      "2026-05-14": [{"title":"월마트 실적발표","time":"오후 9시 이후","major":true}],
+      "2026-05-25": [{"title":"해외 휴장일 (메모리얼 데이)","time":"","major":false}]
+    };
+
     const $monthTitle = document.getElementById("monthTitle");
     const $calGrid = document.getElementById("calGrid");
     const $prevBtn = document.getElementById("prevBtn");
@@ -177,11 +273,12 @@
     const $clearDoneBtn = document.getElementById("clearDoneBtn");
     const $holidayStatus = document.getElementById("holidayStatus");
 
+    const $mktPanel = document.getElementById("mktPanel");
+    const $mktList = document.getElementById("mktList");
+
     // Todos
     let todoData = {}; // dateKey -> todos[]
-
     // Holidays from file
-    // holidayData: { [yearStr]: { [dateKey]: [names...] } }
     let holidayData = {};
 
     const today = new Date();
@@ -197,7 +294,7 @@
       return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
     }
 
-    // ===== Todos load/save =====
+    // ===== Todos =====
     function todoLoad(){
       try{
         const raw = localStorage.getItem(TODO_KEY);
@@ -222,33 +319,17 @@
       return getTodos(dateKey).length;
     }
 
-    // ===== Holiday helpers (from uploaded JSON) =====
+    // ===== Holidays =====
     function getHolidayNames(dateKey){
       const year = dateKey.slice(0,4);
       const yObj = holidayData[year];
       const names = (yObj && yObj[dateKey]) ? yObj[dateKey] : [];
       return Array.isArray(names) ? names : [];
     }
-    function isHoliday(dateKey){
-      return getHolidayNames(dateKey).length > 0;
-    }
     function isSubHolidayByNames(names){
       return names.some(n => String(n).includes("대체"));
     }
-    function isSubHoliday(dateKey){
-      return isSubHolidayByNames(getHolidayNames(dateKey));
-    }
 
-    function escapeHtml(s){
-      return String(s)
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#39;");
-    }
-
-    // ===== Load holiday file (with local cache) =====
     function loadHolidayCache(){
       try{
         const raw = localStorage.getItem(HOLIDAY_CACHE_KEY);
@@ -259,32 +340,30 @@
     function saveHolidayCache(){
       try{ localStorage.setItem(HOLIDAY_CACHE_KEY, JSON.stringify(holidayData)); } catch {}
     }
-
     async function loadHolidayFile(){
-      // 1) 캐시 먼저 로드 (오프라인 대비)
       loadHolidayCache();
-
-      // 2) 파일 fetch 시도
       try{
         const res = await fetch(HOLIDAY_FILE, { cache: "no-store" });
         if(!res.ok) throw new Error(`basic.json fetch failed: ${res.status}`);
         const json = await res.json();
-
-        // 최소 검증(연도 키가 문자열/객체인지)
         if(!json || typeof json !== "object") throw new Error("basic.json invalid");
-
         holidayData = json;
         saveHolidayCache();
         $holidayStatus.textContent = "✅ 공휴일: basic.json 로드 완료";
       } catch (e){
-        // fetch 실패: 캐시가 있으면 사용, 없으면 공휴일 미표시
         if(holidayData && Object.keys(holidayData).length > 0){
-          $holidayStatus.textContent = "⚠️ 공휴일: 네트워크/파일 로드 실패 → 캐시로 표시 중";
+          $holidayStatus.textContent = "⚠️ 공휴일: 로드 실패 → 캐시로 표시 중";
         } else {
-          $holidayStatus.textContent = "⚠️ 공휴일: basic.json을 못 읽어서 표시가 비활성화됨 (파일 경로 확인)";
+          $holidayStatus.textContent = "⚠️ 공휴일: basic.json을 못 읽음 (파일 경로 확인)";
         }
         console.log(e);
       }
+    }
+
+    // ===== Market events =====
+    function getMarketEvents(dateKey){
+      const arr = MARKET_EVENTS[dateKey] || [];
+      return Array.isArray(arr) ? arr : [];
     }
 
     function renderMonthTitle(){
@@ -316,6 +395,9 @@
         const hasSub = hasHoliday && isSubHolidayByNames(holidayNames);
         if(hasHoliday) cell.classList.add("holidayCell");
 
+        const mktEvents = getMarketEvents(key);
+        if(mktEvents.length) cell.classList.add("mktCellHint");
+
         const top = document.createElement("div");
         top.className = "daynum";
 
@@ -338,26 +420,35 @@
 
         top.appendChild(left);
 
-        const c = countTodos(key);
-        if(c > 0){
+        // 오른쪽 배지: 할일 or 증시일정
+        const rightBox = document.createElement("div");
+        rightBox.style.display = "flex";
+        rightBox.style.gap = "6px";
+        rightBox.style.alignItems = "center";
+
+        const todoCount = countTodos(key);
+        if(todoCount > 0){
           const badge = document.createElement("span");
           badge.className = "badge";
-          badge.textContent = `${c}`;
-          top.appendChild(badge);
-        } else {
-          const spacer = document.createElement("span");
-          spacer.style.width = "0px";
-          top.appendChild(spacer);
+          badge.textContent = `${todoCount}`;
+          rightBox.appendChild(badge);
         }
 
+        if(mktEvents.length > 0){
+          const mb = document.createElement("span");
+          mb.className = "mktBadge";
+          mb.textContent = `📈 ${mktEvents.length}`;
+          rightBox.appendChild(mb);
+        }
+
+        top.appendChild(rightBox);
         cell.appendChild(top);
 
-        // 공휴일 목록 표시 (여러 개면 여러 줄)
+        // 공휴일 표시 (최대 2줄)
         if(hasHoliday){
           const wrap = document.createElement("div");
           wrap.className = "holidayWrap";
 
-          // 최대 2줄만 표시(칸이 작아질 수 있으니)
           const show = holidayNames.slice(0, 2);
           for(const nm of show){
             const line = document.createElement("div");
@@ -369,8 +460,6 @@
 
             line.appendChild(hn);
 
-            // 줄 단위가 아니라 "그 날짜에 대체가 있으면" 태그
-            // (예: ["대체공휴일(3ㆍ1절)"] or ["어린이날","부처님 오신 날"] + 대체가 포함되는 경우)
             if(hasSub){
               const tag = document.createElement("span");
               tag.className = "subTag";
@@ -380,21 +469,51 @@
 
             wrap.appendChild(line);
           }
-
-          // 2개 초과면 "외 N"로 축약
           if(holidayNames.length > 2){
             const more = document.createElement("div");
             more.className = "holidayName";
             more.textContent = `외 ${holidayNames.length - 2}`;
             wrap.appendChild(more);
           }
-
           cell.appendChild(wrap);
+        }
+
+        // 증시 일정 표시 (최대 1줄 + 외 N)
+        if(mktEvents.length){
+          const mw = document.createElement("div");
+          mw.className = "mktWrap";
+
+          const firstEv = mktEvents[0];
+          const line = document.createElement("div");
+          line.className = "mktLine";
+
+          const name = document.createElement("div");
+          name.className = "mktName";
+          name.textContent = firstEv.title;
+
+          line.appendChild(name);
+
+          if(firstEv.major){
+            const tag = document.createElement("span");
+            tag.className = "mktMajorTag";
+            tag.textContent = "주요";
+            line.appendChild(tag);
+          }
+
+          mw.appendChild(line);
+
+          if(mktEvents.length > 1){
+            const more = document.createElement("div");
+            more.className = "mktName";
+            more.textContent = `외 ${mktEvents.length - 1}`;
+            mw.appendChild(more);
+          }
+
+          cell.appendChild(mw);
         }
 
         cell.addEventListener("click", () => {
           selectedDateKey = key;
-          // 다른 달 날짜를 눌렀다면 뷰도 그 달로 이동
           if(d.getMonth() !== viewMonth || d.getFullYear() !== viewYear){
             viewYear = d.getFullYear();
             viewMonth = d.getMonth();
@@ -404,6 +523,46 @@
         });
 
         $calGrid.appendChild(cell);
+      }
+    }
+
+    function renderMarketPanel(){
+      const mktEvents = getMarketEvents(selectedDateKey);
+      if(!mktEvents.length){
+        $mktPanel.style.display = "none";
+        $mktList.innerHTML = "";
+        return;
+      }
+
+      $mktPanel.style.display = "block";
+      $mktList.innerHTML = "";
+
+      for(const ev of mktEvents){
+        const item = document.createElement("div");
+        item.className = "mktItem";
+
+        const top = document.createElement("div");
+        top.className = "mktItemTop";
+
+        const pill = document.createElement("span");
+        pill.className = ev.major ? "pillMajor" : "pillMinor";
+        pill.textContent = ev.major ? "주요" : "일정";
+
+        const title = document.createElement("div");
+        title.className = "mktItemTitle";
+        title.textContent = ev.title;
+
+        top.appendChild(pill);
+        top.appendChild(title);
+
+        const time = document.createElement("div");
+        time.className = "mktItemTime";
+        time.textContent = ev.time || "";
+
+        item.appendChild(top);
+        if(ev.time) item.appendChild(time);
+
+        $mktList.appendChild(item);
       }
     }
 
@@ -492,8 +651,18 @@
       renderCalendar();
     }
 
+    function escapeHtml(s){
+      return String(s)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#39;");
+    }
+
     function renderAll(){
       renderCalendar();
+      renderMarketPanel();
       renderTodos();
     }
 
