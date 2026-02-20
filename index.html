@@ -9,7 +9,6 @@
     body { margin: 0; background: #f6f7fb; }
     .wrap { max-width: 720px; margin: 0 auto; padding: 16px; } /* ✅ 폭 더 크게 */
 
-    /* Top */
     .topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
     .title { font-size: 18px; font-weight: 800; }
     .nav { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
@@ -35,12 +34,12 @@
       border: 1px solid #eef0f4;
       border-radius: 0;                 /* ✅ 사각 */
       padding: 12px 10px;
-      min-height: 82px;                 /* ✅ 조금 더 크게 */
+      min-height: 86px;                 /* ✅ 크게 */
       display: flex;
       flex-direction: column;
       gap: 6px;
       cursor: pointer;
-      box-shadow: none;                 /* ✅ 붙어보이게 */
+      box-shadow: none;
       user-select: none;
     }
     .cell.muted { opacity: .45; }
@@ -52,19 +51,16 @@
       line-height: 1;
     }
 
-    /* ✅ 토/일 숫자 색 */
     .sunNum { color: #ef4444; font-weight: 900; }
     .satNum { color: #2563eb; font-weight: 900; }
 
-    /* ✅ 공휴일 스타일 */
+    /* Holiday styles */
     .holidayCell { background: #fff5f5; border-color: #ffd7d7; }
     .holidayNum { color: #ef4444; font-weight: 900; }
 
+    .holidayWrap { display: flex; flex-direction: column; gap: 3px; }
     .holidayLine {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 2px;
+      display: flex; align-items: center; gap: 6px;
       min-height: 14px;
     }
     .holidayName {
@@ -115,6 +111,8 @@
     .done .txt { text-decoration: line-through; color: #9ca3af; }
     .del { background: #ef4444; color: #fff; }
     .empty { padding: 14px 2px; color: #9ca3af; font-size: 14px; }
+
+    .tinyWarn { font-size: 11px; color: #9ca3af; margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -133,6 +131,7 @@
         <div class="sunHead">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="satHead">토</div>
       </div>
       <div class="grid" id="calGrid"></div>
+      <div class="tinyWarn" id="holidayStatus"></div>
     </div>
 
     <div class="card panel">
@@ -155,14 +154,13 @@
   </div>
 
   <script>
-    // ===== Todo Storage Model =====
-    // { "YYYY-MM-DD": [ {id, text, done, createdAt} , ... ], ... }
+    // ===== Todo Storage =====
     const TODO_KEY = "calendar_todo_v1";
 
-    // ===== Holiday Source (KR) =====
-    // GET https://date.nager.at/api/v3/PublicHolidays/{year}/KR
-    const HOLI_CACHE_KEY = "kr_holidays_cache_v1"; // { holidayByYear: { [year]: { [dateKey]: {name,isSub} } }, meta: { [year]: {fetchedAt} } }
-    const HOLI_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30일
+    // ===== Holiday file =====
+    // basic.json: { "2026": { "2026-03-02": ["대체공휴일(3ㆍ1절)"], ... }, ... }
+    const HOLIDAY_FILE = "./basic.json";
+    const HOLIDAY_CACHE_KEY = "kr_holiday_file_cache_v1";
 
     const $monthTitle = document.getElementById("monthTitle");
     const $calGrid = document.getElementById("calGrid");
@@ -177,13 +175,14 @@
     const $todoList = document.getElementById("todoList");
     const $todoEmpty = document.getElementById("todoEmpty");
     const $clearDoneBtn = document.getElementById("clearDoneBtn");
+    const $holidayStatus = document.getElementById("holidayStatus");
 
     // Todos
     let todoData = {}; // dateKey -> todos[]
 
-    // Holidays
-    let holidayByYear = {}; // year -> { dateKey -> {name,isSub} }
-    let holidayCacheMeta = {}; // year -> { fetchedAt }
+    // Holidays from file
+    // holidayData: { [yearStr]: { [dateKey]: [names...] } }
+    let holidayData = {};
 
     const today = new Date();
     let viewYear = today.getFullYear();
@@ -193,10 +192,6 @@
     function pad2(n){ return String(n).padStart(2, "0"); }
     function toKey(d){
       return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-    }
-    function fromKey(key){
-      const [y,m,d] = key.split("-").map(Number);
-      return new Date(y, m-1, d);
     }
     function isSameDay(a,b){
       return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
@@ -227,76 +222,67 @@
       return getTodos(dateKey).length;
     }
 
-    // ===== Holiday cache load/save =====
-    function holidayLoadCache(){
-      try{
-        const raw = localStorage.getItem(HOLI_CACHE_KEY);
-        const parsed = raw ? JSON.parse(raw) : null;
-        if(parsed && typeof parsed === "object"){
-          holidayByYear = parsed.holidayByYear || {};
-          holidayCacheMeta = parsed.meta || {};
-        } else {
-          holidayByYear = {};
-          holidayCacheMeta = {};
-        }
-      } catch {
-        holidayByYear = {};
-        holidayCacheMeta = {};
-      }
-    }
-    function holidaySaveCache(){
-      localStorage.setItem(HOLI_CACHE_KEY, JSON.stringify({
-        holidayByYear,
-        meta: holidayCacheMeta
-      }));
-    }
-
-    function getHolidayObj(dateKey){
-      const y = Number(dateKey.slice(0,4));
-      return (holidayByYear[y] && holidayByYear[y][dateKey]) ? holidayByYear[y][dateKey] : null;
-    }
-    function getHolidayName(dateKey){
-      const o = getHolidayObj(dateKey);
-      return o ? o.name : "";
+    // ===== Holiday helpers (from uploaded JSON) =====
+    function getHolidayNames(dateKey){
+      const year = dateKey.slice(0,4);
+      const yObj = holidayData[year];
+      const names = (yObj && yObj[dateKey]) ? yObj[dateKey] : [];
+      return Array.isArray(names) ? names : [];
     }
     function isHoliday(dateKey){
-      return !!getHolidayName(dateKey);
+      return getHolidayNames(dateKey).length > 0;
+    }
+    function isSubHolidayByNames(names){
+      return names.some(n => String(n).includes("대체"));
     }
     function isSubHoliday(dateKey){
-      const o = getHolidayObj(dateKey);
-      return !!(o && o.isSub);
+      return isSubHolidayByNames(getHolidayNames(dateKey));
     }
 
-    function detectSubstitute(name){
-      const n = (name || "").toLowerCase();
-      // ✅ "대체공휴일", "대체 휴일", "substitute" 등 감지
-      return (name.includes("대체") || n.includes("substitute"));
+    function escapeHtml(s){
+      return String(s)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#39;");
     }
 
-    async function ensureHolidaysForYear(year){
-      const meta = holidayCacheMeta[year];
-      if(holidayByYear[year] && meta && (Date.now() - meta.fetchedAt) < HOLI_TTL_MS){
-        return;
-      }
+    // ===== Load holiday file (with local cache) =====
+    function loadHolidayCache(){
       try{
-        const url = `https://date.nager.at/api/v3/PublicHolidays/${year}/KR`;
-        const res = await fetch(url, { cache: "no-store" });
-        if(!res.ok) throw new Error(`holiday fetch failed: ${res.status}`);
-        const arr = await res.json();
+        const raw = localStorage.getItem(HOLIDAY_CACHE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if(parsed && typeof parsed === "object") holidayData = parsed;
+      } catch {}
+    }
+    function saveHolidayCache(){
+      try{ localStorage.setItem(HOLIDAY_CACHE_KEY, JSON.stringify(holidayData)); } catch {}
+    }
 
-        const map = {};
-        for(const h of arr){
-          const dateKey = h.date; // "YYYY-MM-DD"
-          const name = (h.localName || h.name || "").trim();
-          if(dateKey && name){
-            map[dateKey] = { name, isSub: detectSubstitute(name) };
-          }
-        }
+    async function loadHolidayFile(){
+      // 1) 캐시 먼저 로드 (오프라인 대비)
+      loadHolidayCache();
 
-        holidayByYear[year] = map;
-        holidayCacheMeta[year] = { fetchedAt: Date.now() };
-        holidaySaveCache();
+      // 2) 파일 fetch 시도
+      try{
+        const res = await fetch(HOLIDAY_FILE, { cache: "no-store" });
+        if(!res.ok) throw new Error(`basic.json fetch failed: ${res.status}`);
+        const json = await res.json();
+
+        // 최소 검증(연도 키가 문자열/객체인지)
+        if(!json || typeof json !== "object") throw new Error("basic.json invalid");
+
+        holidayData = json;
+        saveHolidayCache();
+        $holidayStatus.textContent = "✅ 공휴일: basic.json 로드 완료";
       } catch (e){
+        // fetch 실패: 캐시가 있으면 사용, 없으면 공휴일 미표시
+        if(holidayData && Object.keys(holidayData).length > 0){
+          $holidayStatus.textContent = "⚠️ 공휴일: 네트워크/파일 로드 실패 → 캐시로 표시 중";
+        } else {
+          $holidayStatus.textContent = "⚠️ 공휴일: basic.json을 못 읽어서 표시가 비활성화됨 (파일 경로 확인)";
+        }
         console.log(e);
       }
     }
@@ -325,8 +311,10 @@
         if(!inMonth) cell.classList.add("muted");
         if(key === selectedDateKey) cell.classList.add("selected");
 
-        const holiObj = getHolidayObj(key);
-        if(holiObj) cell.classList.add("holidayCell");
+        const holidayNames = getHolidayNames(key);
+        const hasHoliday = holidayNames.length > 0;
+        const hasSub = hasHoliday && isSubHolidayByNames(holidayNames);
+        if(hasHoliday) cell.classList.add("holidayCell");
 
         const top = document.createElement("div");
         top.className = "daynum";
@@ -335,7 +323,7 @@
         left.textContent = d.getDate();
 
         // 공휴일 우선 색상
-        if(holiObj){
+        if(hasHoliday){
           left.classList.add("holidayNum");
         } else {
           if (d.getDay() === 0) left.classList.add("sunNum");
@@ -347,6 +335,7 @@
           dot.className = "todayDot";
           left.appendChild(dot);
         }
+
         top.appendChild(left);
 
         const c = countTodos(key);
@@ -363,34 +352,52 @@
 
         cell.appendChild(top);
 
-        // 공휴일 이름 + 대체 표시
-        if(holiObj){
-          const line = document.createElement("div");
-          line.className = "holidayLine";
+        // 공휴일 목록 표시 (여러 개면 여러 줄)
+        if(hasHoliday){
+          const wrap = document.createElement("div");
+          wrap.className = "holidayWrap";
 
-          const hn = document.createElement("div");
-          hn.className = "holidayName";
-          hn.textContent = holiObj.name;
+          // 최대 2줄만 표시(칸이 작아질 수 있으니)
+          const show = holidayNames.slice(0, 2);
+          for(const nm of show){
+            const line = document.createElement("div");
+            line.className = "holidayLine";
 
-          line.appendChild(hn);
+            const hn = document.createElement("div");
+            hn.className = "holidayName";
+            hn.textContent = nm;
 
-          if(holiObj.isSub){
-            const tag = document.createElement("span");
-            tag.className = "subTag";
-            tag.textContent = "대체";
-            line.appendChild(tag);
+            line.appendChild(hn);
+
+            // 줄 단위가 아니라 "그 날짜에 대체가 있으면" 태그
+            // (예: ["대체공휴일(3ㆍ1절)"] or ["어린이날","부처님 오신 날"] + 대체가 포함되는 경우)
+            if(hasSub){
+              const tag = document.createElement("span");
+              tag.className = "subTag";
+              tag.textContent = "대체";
+              line.appendChild(tag);
+            }
+
+            wrap.appendChild(line);
           }
 
-          cell.appendChild(line);
+          // 2개 초과면 "외 N"로 축약
+          if(holidayNames.length > 2){
+            const more = document.createElement("div");
+            more.className = "holidayName";
+            more.textContent = `외 ${holidayNames.length - 2}`;
+            wrap.appendChild(more);
+          }
+
+          cell.appendChild(wrap);
         }
 
         cell.addEventListener("click", () => {
           selectedDateKey = key;
+          // 다른 달 날짜를 눌렀다면 뷰도 그 달로 이동
           if(d.getMonth() !== viewMonth || d.getFullYear() !== viewYear){
             viewYear = d.getFullYear();
             viewMonth = d.getMonth();
-            renderAllAsync();
-            return;
           }
           renderAll();
           $todoInput.focus();
@@ -406,12 +413,14 @@
       const todos = getTodos(selectedDateKey);
       const doneCount = todos.filter(t => t.done).length;
 
-      const holiObj = getHolidayObj(selectedDateKey);
-      const holiText = holiObj
-        ? ` · 공휴일: ${escapeHtml(holiObj.name)}${holiObj.isSub ? " (대체)" : ""}`
+      const names = getHolidayNames(selectedDateKey);
+      const sub = isSubHolidayByNames(names);
+      const holiText = names.length
+        ? ` · 공휴일: ${escapeHtml(names.join(", "))}${sub ? " (대체 포함)" : ""}`
         : "";
 
-      $selectedMeta.innerHTML = `총 ${todos.length}개 · 완료 ${doneCount}개 (로컬 저장됨)` +
+      $selectedMeta.innerHTML =
+        `총 ${todos.length}개 · 완료 ${doneCount}개 (로컬 저장됨)` +
         (holiText ? ` <span class="holidayTag">${holiText}</span>` : "");
 
       $todoList.innerHTML = "";
@@ -488,44 +497,24 @@
       renderTodos();
     }
 
-    async function renderAllAsync(){
-      const y1 = viewYear;
-      const y2 = Number(selectedDateKey.slice(0,4));
-      await ensureHolidaysForYear(y1);
-      if(y2 !== y1) await ensureHolidaysForYear(y2);
-      renderAll();
-      $todoInput.focus();
-    }
-
-    function escapeHtml(s){
-      return String(s)
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#39;");
-    }
-
     // Navigation
-    $prevBtn.addEventListener("click", async () => {
+    $prevBtn.addEventListener("click", () => {
       const d = new Date(viewYear, viewMonth - 1, 1);
       viewYear = d.getFullYear();
       viewMonth = d.getMonth();
-      await ensureHolidaysForYear(viewYear);
       renderCalendar();
     });
-    $nextBtn.addEventListener("click", async () => {
+    $nextBtn.addEventListener("click", () => {
       const d = new Date(viewYear, viewMonth + 1, 1);
       viewYear = d.getFullYear();
       viewMonth = d.getMonth();
-      await ensureHolidaysForYear(viewYear);
       renderCalendar();
     });
-    $todayBtn.addEventListener("click", async () => {
+    $todayBtn.addEventListener("click", () => {
       viewYear = today.getFullYear();
       viewMonth = today.getMonth();
       selectedDateKey = toKey(today);
-      await renderAllAsync();
+      renderAll();
     });
 
     // Todo actions
@@ -536,10 +525,9 @@
     $clearDoneBtn.addEventListener("click", clearDone);
 
     // Init
-    todoLoad();
-    holidayLoadCache();
     (async () => {
-      await ensureHolidaysForYear(viewYear);
+      todoLoad();
+      await loadHolidayFile(); // ✅ basic.json 로드
       renderAll();
     })();
   </script>
