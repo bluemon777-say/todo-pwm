@@ -196,10 +196,9 @@
        const left = document.createElement("div");
        left.textContent = d.getDate();
 
-       // ✅ 토/일(일=0, 토=6) 숫자 빨간색
-       if (d.getDay() === 0 || d.getDay() === 6) {
-       left.classList.add("weekendNum");
-       }
+       // ✅ 요일별 숫자 색: 일(0)=빨강, 토(6)=파랑
+       if (d.getDay() === 0) left.classList.add("sunNum");
+       if (d.getDay() === 6) left.classList.add("satNum");
 
         // today marker
         if(isSameDay(d, today)){
