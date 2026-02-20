@@ -193,8 +193,13 @@
         const top = document.createElement("div");
         top.className = "daynum";
 
-        const left = document.createElement("div");
-        left.textContent = d.getDate();
+       const left = document.createElement("div");
+       left.textContent = d.getDate();
+
+       // ✅ 토/일(일=0, 토=6) 숫자 빨간색
+       if (d.getDay() === 0 || d.getDay() === 6) {
+       left.classList.add("weekendNum");
+       }
 
         // today marker
         if(isSameDay(d, today)){
