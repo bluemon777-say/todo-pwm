@@ -3,127 +3,347 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>할 일 목록</title>
+  <title>달력 할일</title>
   <style>
     :root { font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
     body { margin: 0; background: #f6f7fb; }
-    .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
-    h1 { margin: 4px 0 14px; font-size: 20px; }
+    .wrap { max-width: 560px; margin: 0 auto; padding: 16px; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-bottom: 12px;
+    }
+    .title { font-size: 18px; font-weight: 700; }
+    .nav { display: flex; gap: 8px; }
+    button {
+      border: 0; border-radius: 12px; padding: 10px 12px; font-size: 14px; cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08); touch-action: manipulation;
+      background: #111827; color: #fff;
+    }
+    button.secondary { background: #e5e7eb; color: #111827; }
     .card { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 8px 20px rgba(0,0,0,.06); }
-    .row { display: flex; gap: 10px; }
+
+    /* Calendar */
+    .dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin: 8px 0; }
+    .dow div { text-align: center; font-size: 12px; color: #6b7280; }
+    .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    .cell {
+      background: #fff; border: 1px solid #eef0f4; border-radius: 14px; padding: 10px 8px;
+      min-height: 62px; display: flex; flex-direction: column; gap: 6px; cursor: pointer;
+      box-shadow: 0 1px 8px rgba(0,0,0,.04);
+      user-select: none;
+    }
+    .cell.muted { opacity: .45; }
+    .cell.selected { outline: 2px solid #111827; }
+    .daynum { font-size: 14px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+    .badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #111827; color: #fff;
+    }
+    .todayDot {
+      width: 8px; height: 8px; border-radius: 999px; background: #ef4444; display: inline-block;
+      margin-left: 6px;
+    }
+
+    /* Todo panel */
+    .panel { margin-top: 12px; }
+    .panelHeader { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .panelTitle { font-size: 16px; font-weight: 800; }
+    .meta { margin-top: 6px; font-size: 12px; color: #6b7280; }
+    .row { display: flex; gap: 10px; margin-top: 12px; }
     input[type="text"]{
       flex: 1; border: 1px solid #e5e7eb; border-radius: 12px;
       padding: 12px; font-size: 16px; outline: none;
     }
-    button{
-      border: 0; border-radius: 12px; padding: 12px 14px;
-      font-size: 16px; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.08);
-      touch-action: manipulation;
-    }
-    .add { background: #111827; color: #fff; min-width: 86px; }
-    .meta { margin: 10px 2px 2px; font-size: 12px; color: #6b7280; }
+    .add { min-width: 86px; }
+
     ul { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 10px; }
-    li { background: #fff; border-radius: 14px; padding: 12px; border: 1px solid #eef0f4; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    li {
+      background: #fff; border-radius: 14px; padding: 12px; border: 1px solid #eef0f4;
+      display: flex; justify-content: space-between; gap: 10px; align-items: center;
+    }
+    .left { display: flex; gap: 10px; align-items: flex-start; flex: 1; min-width: 0; }
+    .check { transform: scale(1.15); margin-top: 2px; }
     .txt { white-space: pre-wrap; word-break: break-word; line-height: 1.3; font-size: 16px; }
-    .del { background: #ef4444; color: white; }
+    .done .txt { text-decoration: line-through; color: #9ca3af; }
+    .del { background: #ef4444; color: #fff; }
     .empty { padding: 14px 2px; color: #9ca3af; font-size: 14px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>✅ 할 일 목록</h1>
+    <div class="topbar">
+      <div class="title" id="monthTitle">📅</div>
+      <div class="nav">
+        <button class="secondary" id="prevBtn">이전</button>
+        <button class="secondary" id="todayBtn">오늘</button>
+        <button class="secondary" id="nextBtn">다음</button>
+      </div>
+    </div>
 
     <div class="card">
+      <div class="dow">
+        <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+      </div>
+      <div class="grid" id="calGrid"></div>
+    </div>
+
+    <div class="card panel">
+      <div class="panelHeader">
+        <div>
+          <div class="panelTitle" id="selectedTitle">선택한 날짜</div>
+          <div class="meta" id="selectedMeta"></div>
+        </div>
+        <button class="secondary" id="clearDoneBtn">완료삭제</button>
+      </div>
+
       <div class="row">
-        <input id="todoInput" type="text" placeholder="할 일을 입력하세요" autocomplete="off" />
+        <input id="todoInput" type="text" placeholder="선택한 날짜에 할 일을 추가" autocomplete="off" />
         <button class="add" id="addBtn">추가</button>
       </div>
-      <div class="meta" id="meta"></div>
 
-      <ul id="list"></ul>
-      <div class="empty" id="empty" style="display:none;">아직 할 일이 없어요 🙂</div>
+      <ul id="todoList"></ul>
+      <div class="empty" id="todoEmpty" style="display:none;">이 날짜에는 할 일이 없어요 🙂</div>
     </div>
   </div>
 
   <script>
-    const KEY = "simple_todo_list_v1";
+    // ===== Storage Model =====
+    // { "YYYY-MM-DD": [ {id, text, done, createdAt} , ... ], ... }
+    const KEY = "calendar_todo_v1";
 
-    const $input = document.getElementById("todoInput");
+    const $monthTitle = document.getElementById("monthTitle");
+    const $calGrid = document.getElementById("calGrid");
+    const $prevBtn = document.getElementById("prevBtn");
+    const $nextBtn = document.getElementById("nextBtn");
+    const $todayBtn = document.getElementById("todayBtn");
+
+    const $selectedTitle = document.getElementById("selectedTitle");
+    const $selectedMeta = document.getElementById("selectedMeta");
+    const $todoInput = document.getElementById("todoInput");
     const $addBtn = document.getElementById("addBtn");
-    const $list = document.getElementById("list");
-    const $meta = document.getElementById("meta");
-    const $empty = document.getElementById("empty");
+    const $todoList = document.getElementById("todoList");
+    const $todoEmpty = document.getElementById("todoEmpty");
+    const $clearDoneBtn = document.getElementById("clearDoneBtn");
 
-    /** @type {{id:string,text:string,createdAt:number}[]} */
-    let todos = [];
+    let data = {}; // dateKey -> todos[]
+    const today = new Date();
+    let viewYear = today.getFullYear();
+    let viewMonth = today.getMonth(); // 0-11
+    let selectedDateKey = toKey(today);
 
-    function load() {
-      try {
+    function pad2(n){ return String(n).padStart(2, "0"); }
+    function toKey(d){
+      return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+    }
+    function fromKey(key){
+      const [y,m,d] = key.split("-").map(Number);
+      return new Date(y, m-1, d);
+    }
+    function isSameDay(a,b){
+      return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+    }
+    function safeLoad(){
+      try{
         const raw = localStorage.getItem(KEY);
-        todos = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(todos)) todos = [];
+        const parsed = raw ? JSON.parse(raw) : {};
+        data = (parsed && typeof parsed === "object") ? parsed : {};
       } catch {
-        todos = [];
+        data = {};
+      }
+    }
+    function save(){
+      localStorage.setItem(KEY, JSON.stringify(data));
+    }
+
+    function getTodos(dateKey){
+      const arr = data[dateKey];
+      return Array.isArray(arr) ? arr : [];
+    }
+    function setTodos(dateKey, todos){
+      data[dateKey] = todos;
+      save();
+    }
+    function countTodos(dateKey){
+      return getTodos(dateKey).length;
+    }
+
+    function renderMonthTitle(){
+      $monthTitle.textContent = `📅 ${viewYear}-${pad2(viewMonth+1)}`;
+    }
+
+    function renderCalendar(){
+      renderMonthTitle();
+      $calGrid.innerHTML = "";
+
+      // Calendar range (6 rows * 7 = 42 cells)
+      const first = new Date(viewYear, viewMonth, 1);
+      const firstDow = first.getDay(); // 0 Sun
+      const start = new Date(viewYear, viewMonth, 1 - firstDow);
+
+      for(let i=0;i<42;i++){
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const inMonth = (d.getMonth() === viewMonth);
+        const key = toKey(d);
+
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        if(!inMonth) cell.classList.add("muted");
+        if(key === selectedDateKey) cell.classList.add("selected");
+
+        const top = document.createElement("div");
+        top.className = "daynum";
+
+        const left = document.createElement("div");
+        left.textContent = d.getDate();
+
+        // today marker
+        if(isSameDay(d, today)){
+          const dot = document.createElement("span");
+          dot.className = "todayDot";
+          left.appendChild(dot);
+        }
+
+        top.appendChild(left);
+
+        const c = countTodos(key);
+        if(c > 0){
+          const badge = document.createElement("span");
+          badge.className = "badge";
+          badge.textContent = `${c}`;
+          top.appendChild(badge);
+        } else {
+          const spacer = document.createElement("span");
+          spacer.style.width = "0px";
+          top.appendChild(spacer);
+        }
+
+        cell.appendChild(top);
+
+        cell.addEventListener("click", () => {
+          selectedDateKey = key;
+          // 달력에서 다른 달 날짜를 눌렀다면 뷰도 그 달로 이동
+          if(d.getMonth() !== viewMonth || d.getFullYear() !== viewYear){
+            viewYear = d.getFullYear();
+            viewMonth = d.getMonth();
+          }
+          renderAll();
+          $todoInput.focus();
+        });
+
+        $calGrid.appendChild(cell);
       }
     }
 
-    function save() {
-      localStorage.setItem(KEY, JSON.stringify(todos));
-    }
+    function renderTodos(){
+      const d = fromKey(selectedDateKey);
+      $selectedTitle.textContent = `📌 ${selectedDateKey} 할 일`;
+      const todos = getTodos(selectedDateKey);
+      const doneCount = todos.filter(t => t.done).length;
+      $selectedMeta.textContent = `총 ${todos.length}개 · 완료 ${doneCount}개 (로컬 저장됨)`;
 
-    function render() {
-      $list.innerHTML = "";
-      $meta.textContent = `총 ${todos.length}개 (휴대폰에 저장됨)`;
+      $todoList.innerHTML = "";
+      $todoEmpty.style.display = (todos.length === 0) ? "block" : "none";
 
-      $empty.style.display = (todos.length === 0) ? "block" : "none";
-
-      for (const t of todos) {
+      for(const t of todos){
         const li = document.createElement("li");
+        if(t.done) li.classList.add("done");
+
+        const left = document.createElement("div");
+        left.className = "left";
+
+        const ck = document.createElement("input");
+        ck.type = "checkbox";
+        ck.className = "check";
+        ck.checked = !!t.done;
+        ck.addEventListener("change", () => {
+          t.done = ck.checked;
+          setTodos(selectedDateKey, todos);
+          renderTodos();
+          renderCalendar(); // 배지 숫자 유지 (개수는 같지만, 상태 반영용으로)
+        });
 
         const txt = document.createElement("div");
         txt.className = "txt";
         txt.textContent = t.text;
 
+        left.appendChild(ck);
+        left.appendChild(txt);
+
         const del = document.createElement("button");
         del.className = "del";
         del.textContent = "삭제";
         del.addEventListener("click", () => {
-          todos = todos.filter(x => x.id !== t.id);
-          save();
-          render();
+          const next = todos.filter(x => x.id !== t.id);
+          setTodos(selectedDateKey, next);
+          renderTodos();
+          renderCalendar(); // 배지 갱신
         });
 
-        li.appendChild(txt);
+        li.appendChild(left);
         li.appendChild(del);
-        $list.appendChild(li);
+        $todoList.appendChild(li);
       }
     }
 
-    function addTodo() {
-      const text = ($input.value || "").trim();
-      if (!text) return;
-
+    function addTodo(){
+      const text = ($todoInput.value || "").trim();
+      if(!text) return;
+      const todos = getTodos(selectedDateKey);
       todos.unshift({
         id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
         text,
+        done: false,
         createdAt: Date.now()
       });
-
-      $input.value = "";
-      $input.focus();
-      save();
-      render();
+      setTodos(selectedDateKey, todos);
+      $todoInput.value = "";
+      renderTodos();
+      renderCalendar(); // 배지 + 선택 강조 유지
     }
 
-    // 이벤트
-    $addBtn.addEventListener("click", addTodo);
-    $input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") addTodo(); // 모바일 키보드 Enter
+    function clearDone(){
+      const todos = getTodos(selectedDateKey);
+      const next = todos.filter(t => !t.done);
+      setTodos(selectedDateKey, next);
+      renderTodos();
+      renderCalendar();
+    }
+
+    function renderAll(){
+      renderCalendar();
+      renderTodos();
+    }
+
+    // Navigation
+    $prevBtn.addEventListener("click", () => {
+      const d = new Date(viewYear, viewMonth - 1, 1);
+      viewYear = d.getFullYear();
+      viewMonth = d.getMonth();
+      renderCalendar();
+    });
+    $nextBtn.addEventListener("click", () => {
+      const d = new Date(viewYear, viewMonth + 1, 1);
+      viewYear = d.getFullYear();
+      viewMonth = d.getMonth();
+      renderCalendar();
+    });
+    $todayBtn.addEventListener("click", () => {
+      viewYear = today.getFullYear();
+      viewMonth = today.getMonth();
+      selectedDateKey = toKey(today);
+      renderAll();
     });
 
-    // 초기
-    load();
-    render();
+    // Todo actions
+    $addBtn.addEventListener("click", addTodo);
+    $todoInput.addEventListener("keydown", (e) => {
+      if(e.key === "Enter") addTodo(); // 모바일 키보드 Enter
+    });
+    $clearDoneBtn.addEventListener("click", clearDone);
+
+    // Init
+    safeLoad();
+    renderAll();
   </script>
 </body>
 </html>
